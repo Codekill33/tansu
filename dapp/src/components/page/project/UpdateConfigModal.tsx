@@ -248,6 +248,13 @@ const UpdateConfigModal = () => {
     string | null
   >(null);
 
+  // Revoke blob URLs on unmount to avoid memory leaks
+  useEffect(() => {
+    return () => {
+      readmeImageFiles.forEach((img) => URL.revokeObjectURL(img.localUrl));
+    };
+  }, [readmeImageFiles]);
+
   // Pre-fill all fields whenever projectInfo OR configData becomes available
   useEffect(() => {
     if (!infoLoaded) return;
@@ -294,7 +301,10 @@ const UpdateConfigModal = () => {
   useEffect(() => {
     if (!open) return;
 
-    setReadmeImageFiles([]);
+    setReadmeImageFiles((prev) => {
+      prev.forEach((img) => URL.revokeObjectURL(img.localUrl));
+      return [];
+    });
     setReadmeImageError(null);
 
     const projectInfo = loadProjectInfo();
@@ -424,13 +434,18 @@ const UpdateConfigModal = () => {
         readmeImageFiles.forEach((img) => {
           if (readmeToSave.includes(img.localUrl)) {
             readmeToSave = readmeToSave.replace(
-              new RegExp(img.localUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"),
+              new RegExp(
+                img.localUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+                "g",
+              ),
               img.publicUrl,
             );
             imageFilesToInclude.push(new File([img.source], img.publicUrl));
           }
         });
-        additionalFiles.push(new File([readmeToSave], "README.md", { type: "text/markdown" }));
+        additionalFiles.push(
+          new File([readmeToSave], "README.md", { type: "text/markdown" }),
+        );
         additionalFiles.push(...imageFilesToInclude);
       }
 
@@ -712,9 +727,7 @@ const UpdateConfigModal = () => {
                                     alt={`attachment-${idx}`}
                                     className="w-full h-20 object-contain rounded"
                                   />
-                                  <div
-                                    className="flex justify-between items-center gap-2"
-                                  >
+                                  <div className="flex justify-between items-center gap-2">
                                     <button
                                       type="button"
                                       className="text-blue-600 hover:text-blue-800 underline text-xs"

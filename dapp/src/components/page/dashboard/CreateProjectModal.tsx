@@ -80,6 +80,13 @@ const CreateProjectModal: FC<ModalProps> = ({ onClose }) => {
   const walletKey = useStore(connectedPublicKey);
   const isWalletReady = useStore(walletInitialized);
 
+  // Revoke blob URLs on unmount to avoid memory leaks
+  useEffect(() => {
+    return () => {
+      readmeImageFiles.forEach((img) => URL.revokeObjectURL(img.localUrl));
+    };
+  }, [readmeImageFiles]);
+
   // Seed the first maintainer address once when the wallet resolves
   useEffect(() => {
     if (!walletKey) return;
@@ -378,7 +385,10 @@ ${maintainerGithubs.map((gh) => `[[PRINCIPALS]]\ngithub="${gh}"`).join("\n\n")}
         readmeImageFiles.forEach((img) => {
           if (finalReadme.includes(img.localUrl)) {
             finalReadme = finalReadme.replace(
-              new RegExp(img.localUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"),
+              new RegExp(
+                img.localUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+                "g",
+              ),
               img.publicUrl,
             );
          imageFilesToInclude.push(new File([img.source], img.publicUrl, { type: img.source.type }));
@@ -946,9 +956,7 @@ ${maintainerGithubs.map((gh) => `[[PRINCIPALS]]\ngithub="${gh}"`).join("\n\n")}
                                   alt={`attachment-${idx}`}
                                   className="w-full h-20 object-contain rounded"
                                 />
-                                <div
-                                  className="flex justify-between items-center gap-2"
-                                >
+                                <div className="flex justify-between items-center gap-2">
                                   <button
                                     type="button"
                                     className="text-blue-600 hover:text-blue-800 underline text-xs"
