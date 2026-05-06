@@ -381,7 +381,7 @@ ${maintainerGithubs.map((gh) => `[[PRINCIPALS]]\ngithub="${gh}"`).join("\n\n")}
               new RegExp(img.localUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"),
               img.publicUrl,
             );
-            imageFilesToInclude.push(new File([img.source], img.publicUrl));
+         imageFilesToInclude.push(new File([img.source], img.publicUrl, { type: img.source.type }));
           }
         });
         additionalFiles = [
