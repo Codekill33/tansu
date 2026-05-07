@@ -13,7 +13,7 @@ import Label from "components/utils/Label.tsx";
 import FlowProgressModal from "components/utils/FlowProgressModal.tsx";
 import Step from "components/utils/Step.tsx";
 import Title from "components/utils/Title.tsx";
-import { useState, type FC, useCallback, useEffect } from "react";
+import { useState, type FC, useCallback, useEffect, useRef } from "react";
 import { getAuthorRepo } from "utils/editLinkFunctions";
 import { extractConfigData, toast } from "utils/utils";
 import {
@@ -80,12 +80,20 @@ const CreateProjectModal: FC<ModalProps> = ({ onClose }) => {
   const walletKey = useStore(connectedPublicKey);
   const isWalletReady = useStore(walletInitialized);
 
-  // Revoke blob URLs on unmount to avoid memory leaks
+  // Keep a ref in sync so the unmount cleanup always sees the latest URLs
+  const readmeImageFilesRef = useRef<ReadmeImage[]>([]);
+  useEffect(() => {
+    readmeImageFilesRef.current = readmeImageFiles;
+  }, [readmeImageFiles]);
+
+  // Revoke blob URLs only on unmount, not on every state change
   useEffect(() => {
     return () => {
-      readmeImageFiles.forEach((img) => URL.revokeObjectURL(img.localUrl));
+      readmeImageFilesRef.current.forEach((img) =>
+        URL.revokeObjectURL(img.localUrl),
+      );
     };
-  }, [readmeImageFiles]);
+  }, []);
 
   // Seed the first maintainer address once when the wallet resolves
   useEffect(() => {
@@ -391,7 +399,9 @@ ${maintainerGithubs.map((gh) => `[[PRINCIPALS]]\ngithub="${gh}"`).join("\n\n")}
               ),
               img.publicUrl,
             );
-         imageFilesToInclude.push(new File([img.source], img.publicUrl, { type: img.source.type }));
+            imageFilesToInclude.push(
+              new File([img.source], img.publicUrl, { type: img.source.type }),
+            );
           }
         });
         additionalFiles = [

@@ -248,12 +248,20 @@ const UpdateConfigModal = () => {
     string | null
   >(null);
 
-  // Revoke blob URLs on unmount to avoid memory leaks
+  // Keep a ref in sync so the unmount cleanup always sees the latest URLs
+  const readmeImageFilesRef = useRef<ReadmeImage[]>([]);
+  useEffect(() => {
+    readmeImageFilesRef.current = readmeImageFiles;
+  }, [readmeImageFiles]);
+
+  // Revoke blob URLs only on unmount, not on every state change
   useEffect(() => {
     return () => {
-      readmeImageFiles.forEach((img) => URL.revokeObjectURL(img.localUrl));
+      readmeImageFilesRef.current.forEach((img) =>
+        URL.revokeObjectURL(img.localUrl),
+      );
     };
-  }, [readmeImageFiles]);
+  }, []);
 
   // Pre-fill all fields whenever projectInfo OR configData becomes available
   useEffect(() => {
@@ -443,6 +451,32 @@ const UpdateConfigModal = () => {
             imageFilesToInclude.push(new File([img.source], img.publicUrl));
           }
         });
+        // Re-fetch any existing relative images from the old IPFS CID so they
+        // are carried over into the new CAR and not orphaned after the update.
+        if (ipfsCid) {
+          const handledPaths = new Set(imageFilesToInclude.map((f) => f.name));
+          const relativeImgRegex = /!\[([^\]]*)\]\((?!https?:\/\/)([^)]+)\)/g;
+          const matches = [...readmeToSave.matchAll(relativeImgRegex)];
+          await Promise.all(
+            matches.map(async (match) => {
+              const relativePath = match[2];
+              if (handledPaths.has(relativePath)) return;
+              try {
+                const res = await fetch(
+                  `${getIpfsBasicLink(ipfsCid)}/${relativePath}`,
+                );
+                if (!res.ok) return;
+                const blob = await res.blob();
+                imageFilesToInclude.push(
+                  new File([blob], relativePath, { type: blob.type }),
+                );
+              } catch {
+                // image no longer reachable — leave the reference as-is
+              }
+            }),
+          );
+        }
+
         additionalFiles.push(
           new File([readmeToSave], "README.md", { type: "text/markdown" }),
         );
