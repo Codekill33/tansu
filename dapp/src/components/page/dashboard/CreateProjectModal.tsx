@@ -1,10 +1,11 @@
 import { getProjectFromName } from "@service/ReadContractService";
+import { createProjectFlow } from "@service/FlowService";
 import { useStore } from "@nanostores/react";
 import { connectedPublicKey, walletInitialized } from "utils/store";
 import {
   setConfigData,
   setProject,
-  setProjectRepoInfo,
+  setProjectRepoUrl,
 } from "@service/StateService";
 import { navigate } from "astro:transitions/client";
 import Button from "components/utils/Button.tsx";
@@ -14,16 +15,26 @@ import FlowProgressModal from "components/utils/FlowProgressModal.tsx";
 import Step from "components/utils/Step.tsx";
 import Title from "components/utils/Title.tsx";
 import { useState, type FC, useCallback, useEffect, useRef } from "react";
-import { getAuthorRepo } from "utils/editLinkFunctions";
 import { extractConfigData, toast } from "utils/utils";
 import {
   validateProjectName as validateProjectNameUtil,
   validateGithubUrl,
   validateMaintainerAddress,
 } from "utils/validations.ts";
+import { fetchTomlFromIpfs } from "utils/ipfsFunctions";
 import Textarea from "components/utils/Textarea.tsx";
 import Spinner from "components/utils/Spinner.tsx";
 import { ProjectType } from "types/projectConfig";
+import {
+  getRepositoryHandleLabel,
+  getRepositoryHandlePlaceholder,
+  getRepositoryProjectPath,
+  getRepositoryProvider,
+  getRepositoryProviderLabel,
+  getRepositoryUrlPlaceholder,
+  SUPPORTED_REPOSITORY_PROVIDERS,
+  type RepositoryProvider,
+} from "utils/editLinkFunctions";
 import SimpleMarkdownEditor from "components/utils/SimpleMarkdownEditor";
 
 // Get domain contract ID from environment with fallback
@@ -65,6 +76,8 @@ const CreateProjectModal: FC<ModalProps> = ({ onClose }) => {
 
   const [maintainerGithubs, setMaintainerGithubs] = useState<string[]>([""]);
   const [githubRepoUrl, setGithubRepoUrl] = useState("");
+  const [selectedRepositoryProvider, setSelectedRepositoryProvider] =
+    useState<RepositoryProvider>("github");
   const [readmeContent, setReadmeContent] = useState("");
   type ReadmeImage = { localUrl: string; publicUrl: string; source: File };
   const [readmeImageFiles, setReadmeImageFiles] = useState<ReadmeImage[]>([]);
@@ -79,6 +92,24 @@ const CreateProjectModal: FC<ModalProps> = ({ onClose }) => {
 
   const walletKey = useStore(connectedPublicKey);
   const isWalletReady = useStore(walletInitialized);
+  const parsedRepositoryProvider = getRepositoryProvider(githubRepoUrl);
+  const activeRepositoryProvider =
+    projectType === ProjectType.SOFTWARE
+      ? parsedRepositoryProvider || selectedRepositoryProvider
+      : undefined;
+  const repositoryProviderLabel = getRepositoryProviderLabel(
+    activeRepositoryProvider,
+  );
+  const repositoryHandleLabel =
+    projectType === ProjectType.SOFTWARE
+      ? getRepositoryHandleLabel(activeRepositoryProvider)
+      : "Maintainer Handle";
+  const repositoryHandlePlaceholder = getRepositoryHandlePlaceholder(
+    activeRepositoryProvider,
+  );
+  const repositoryUrlPlaceholder = getRepositoryUrlPlaceholder(
+    activeRepositoryProvider,
+  );
 
   // Keep a ref in sync so the unmount cleanup always sees the latest URLs
   const readmeImageFilesRef = useRef<ReadmeImage[]>([]);
@@ -303,11 +334,11 @@ const CreateProjectModal: FC<ModalProps> = ({ onClose }) => {
     const ghErrors = maintainerGithubs.map((gh) => {
       if (!gh || gh.trim() === "") {
         isValid = false;
-        return "GitHub handle is required";
+        return `${repositoryHandleLabel} is required`;
       }
       if (!ghRegex.test(gh)) {
         isValid = false;
-        return "Handle must be ASCII (letters, digits, _ or -) and ≤30 chars";
+        return `${repositoryHandleLabel} must use ASCII letters, digits, _ or -, and be 30 characters or fewer`;
       }
       return null;
     });
@@ -317,7 +348,7 @@ const CreateProjectModal: FC<ModalProps> = ({ onClose }) => {
     return isValid;
   };
 
-  const validateGithubRepoUrl = () => {
+  const validateRepositoryUrl = () => {
     const error = validateGithubUrl(githubRepoUrl);
     setGithubRepoUrlError(error);
     return error === null;
@@ -352,10 +383,6 @@ const CreateProjectModal: FC<ModalProps> = ({ onClose }) => {
 
   const handleRegisterProject = async () => {
     setIsLoading(true);
-    // Dynamic imports for heavy libs
-    const [{ fetchTomlFromIpfs }] = await Promise.all([
-      import("utils/ipfsFunctions"),
-    ]);
 
     try {
       const publicKey = connectedPublicKey.get();
@@ -376,7 +403,8 @@ ORG_DBA="${projectFullName.trim()}"
 ORG_NAME="${orgName}"
 ORG_URL="${orgUrl}"
 ORG_LOGO="${orgLogo}"
-ORG_DESCRIPTION="${orgDescription}"${projectType === ProjectType.SOFTWARE ? `\nORG_GITHUB="${githubRepoUrl.split("https://github.com/")[1] || ""}"` : ""}
+ORG_DESCRIPTION="${orgDescription}"
+${projectType === ProjectType.SOFTWARE ? `ORG_GITHUB="${getRepositoryProjectPath(githubRepoUrl)}"` : ""}
 
 ${maintainerGithubs.map((gh) => `[[PRINCIPALS]]\ngithub="${gh}"`).join("\n\n")}
 `;
@@ -413,8 +441,6 @@ ${maintainerGithubs.map((gh) => `[[PRINCIPALS]]\ngithub="${gh}"`).join("\n\n")}
       // show progress
       setStep(6);
 
-      const { createProjectFlow } = await import("@service/FlowService");
-
       await createProjectFlow({
         projectName,
         tomlFile,
@@ -430,9 +456,8 @@ ${maintainerGithubs.map((gh) => `[[PRINCIPALS]]\ngithub="${gh}"`).join("\n\n")}
       if (project && project.name && project.config && project.maintainers) {
         setProject(project);
 
-        const { username, repoName } = getAuthorRepo(project.config.url);
-        if (username && repoName) {
-          setProjectRepoInfo(username, repoName);
+        if (project.config.url) {
+          setProjectRepoUrl(project.config.url);
         }
 
         const tomlData = await fetchTomlFromIpfs(project.config.ipfs);
@@ -533,7 +558,11 @@ ${maintainerGithubs.map((gh) => `[[PRINCIPALS]]\ngithub="${gh}"`).join("\n\n")}
                   <Step step={step} totalSteps={5} />
                   <Title
                     title="Welcome to Your New Project!"
-                    description="Add your project name and display name to get started."
+                    description={
+                      projectType === ProjectType.SOFTWARE
+                        ? "Add your project name, choose a repository provider, and paste the repo URL early so the rest of the form adapts automatically."
+                        : "Add your project name and display name to get started."
+                    }
                   />
                 </div>
                 <div className="relative">
@@ -613,7 +642,7 @@ ${maintainerGithubs.map((gh) => `[[PRINCIPALS]]\ngithub="${gh}"`).join("\n\n")}
                         className="w-4 h-4"
                       />
                       <span className="text-primary">
-                        Software Project (uses Git/GitHub)
+                        Software Project (uses a supported git provider)
                       </span>
                     </label>
                     <label className="flex items-center gap-2 cursor-pointer">
@@ -630,10 +659,56 @@ ${maintainerGithubs.map((gh) => `[[PRINCIPALS]]\ngithub="${gh}"`).join("\n\n")}
                   </div>
                   <p className="text-sm text-secondary">
                     {projectType === ProjectType.SOFTWARE
-                      ? "For software projects with Git history and GitHub integration"
+                      ? "For software projects hosted on GitHub, GitLab, Bitbucket, Codeberg, or Gitea"
                       : "For non-software projects like creative work, documentation, or community initiatives"}
                   </p>
                 </div>
+                {projectType === ProjectType.SOFTWARE && (
+                  <div className="flex flex-col gap-[30px]">
+                    <div className="flex flex-col gap-3">
+                      <Label label="Repository Provider" />
+                      <select
+                        value={
+                          activeRepositoryProvider || selectedRepositoryProvider
+                        }
+                        onChange={(e) =>
+                          setSelectedRepositoryProvider(
+                            e.target.value as RepositoryProvider,
+                          )
+                        }
+                        className="p-[18px] border border-[#978AA1] outline-none bg-white"
+                      >
+                        {SUPPORTED_REPOSITORY_PROVIDERS.map((provider) => (
+                          <option key={provider} value={provider}>
+                            {getRepositoryProviderLabel(provider)}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="leading-[16px] text-base text-tertiary">
+                        You can choose the provider first or paste the
+                        repository URL below and let the form detect it.
+                      </p>
+                    </div>
+
+                    <Input
+                      label={`${repositoryProviderLabel} Repository URL`}
+                      placeholder={repositoryUrlPlaceholder}
+                      value={githubRepoUrl}
+                      onChange={(e) => {
+                        const nextValue = e.target.value;
+                        setGithubRepoUrl(nextValue);
+                        setGithubRepoUrlError(null);
+
+                        const parsedProvider = getRepositoryProvider(nextValue);
+                        if (parsedProvider) {
+                          setSelectedRepositoryProvider(parsedProvider);
+                        }
+                      }}
+                      description={`Supported formats are HTTPS or SSH URLs for ${repositoryProviderLabel}.`}
+                      error={githubRepoUrlError}
+                    />
+                  </div>
+                )}
               </div>
             </div>
             <div className="flex flex-col sm:flex-row sm:justify-end gap-3 sm:gap-[18px]">
@@ -668,6 +743,14 @@ ${maintainerGithubs.map((gh) => `[[PRINCIPALS]]\ngithub="${gh}"`).join("\n\n")}
                     // Perform SorobanDomain validation
                     const isValid = await validateAndSetProjectNameError();
 
+                    if (
+                      isValid &&
+                      projectType === ProjectType.SOFTWARE &&
+                      !validateRepositoryUrl()
+                    ) {
+                      return;
+                    }
+
                     if (isValid) {
                       setStep(step + 1);
                     }
@@ -701,7 +784,11 @@ ${maintainerGithubs.map((gh) => `[[PRINCIPALS]]\ngithub="${gh}"`).join("\n\n")}
                   <Step step={step} totalSteps={5} />
                   <Title
                     title="Build Your Team"
-                    description="Add yourself as the maintainer and optionally include team members to collaborate on your project."
+                    description={
+                      projectType === ProjectType.SOFTWARE
+                        ? `Add maintainer wallet addresses and ${repositoryProviderLabel} handles for the contributors associated with this repository.`
+                        : "Add yourself as the maintainer and optionally include team members to collaborate on your project."
+                    }
                   />
                 </div>
                 <div className="flex flex-col gap-[18px]">
@@ -733,9 +820,9 @@ ${maintainerGithubs.map((gh) => `[[PRINCIPALS]]\ngithub="${gh}"`).join("\n\n")}
                           className="flex-1"
                           value={maintainerGithubs[i] ?? ""}
                           {...(i == 0 && {
-                            label: "GitHub Handle",
+                            label: repositoryHandleLabel,
                           })}
-                          placeholder="username"
+                          placeholder={repositoryHandlePlaceholder}
                           onChange={(e) => {
                             setMaintainerGithubs(
                               maintainerGithubs.map((gh, j) =>
@@ -828,8 +915,16 @@ ${maintainerGithubs.map((gh) => `[[PRINCIPALS]]\ngithub="${gh}"`).join("\n\n")}
                 <div className="flex flex-col gap-3 md:gap-5">
                   <Step step={step} totalSteps={5} />
                   <Title
-                    title="Add Supporting Materials"
-                    description="Attach links to provide more context and strengthen your project proposal."
+                    title={
+                      projectType === ProjectType.SOFTWARE
+                        ? "Add Organization Details"
+                        : "Add Supporting Materials"
+                    }
+                    description={
+                      projectType === ProjectType.SOFTWARE
+                        ? "Add organization links, branding, and project context. Repository details were already collected so labels stay provider-aware throughout the flow."
+                        : "Attach links and README content to provide more context and strengthen your project proposal."
+                    }
                   />
                 </div>
                 <div className="flex flex-col gap-[30px]">
@@ -1015,14 +1110,9 @@ ${maintainerGithubs.map((gh) => `[[PRINCIPALS]]\ngithub="${gh}"`).join("\n\n")}
               </Button>
               <Button
                 onClick={() => {
-                  // Only validate GitHub URL for software projects
-                  const isGithubUrlValid =
-                    projectType === ProjectType.SOFTWARE
-                      ? validateGithubRepoUrl()
-                      : true;
                   const areOrgFieldsValid = validateOrgFields();
 
-                  if (isGithubUrlValid && areOrgFieldsValid) {
+                  if (areOrgFieldsValid) {
                     setStep(step + 1);
                   }
                 }}
@@ -1136,9 +1226,20 @@ ${maintainerGithubs.map((gh) => `[[PRINCIPALS]]\ngithub="${gh}"`).join("\n\n")}
                 Back to the Third Step
               </Button>
             </div>
-            <Label label="GitHub Repository URL">
-              <p className="leading-6 text-xl text-primary">{githubRepoUrl}</p>
-            </Label>
+            {projectType === ProjectType.SOFTWARE && (
+              <>
+                <Label label="Repository Provider">
+                  <p className="leading-6 text-xl text-primary">
+                    {repositoryProviderLabel}
+                  </p>
+                </Label>
+                <Label label={`${repositoryProviderLabel} Repository URL`}>
+                  <p className="leading-6 text-xl text-primary">
+                    {githubRepoUrl}
+                  </p>
+                </Label>
+              </>
+            )}
           </div>
         </div>
       ) : null}

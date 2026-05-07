@@ -132,6 +132,10 @@ export type ProjectKey =
   | {
       tag: "TotalProjects";
       values: void;
+    }
+  | {
+      tag: "ConflictOfInterest";
+      values: readonly [Buffer, u32];
     };
 export interface PublicVote {
   address: string;
@@ -269,6 +273,9 @@ export declare const ContractErrors: {
     message: string;
   };
   210: {
+    message: string;
+  };
+  211: {
     message: string;
   };
   300: {
@@ -598,6 +605,60 @@ export interface Client {
     options?: MethodOptions,
   ) => Promise<AssembledTransaction<null>>;
   /**
+   * Construct and simulate a add_conflict_of_interest transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   * Add addresses to the conflict-of-interest list of a proposal.
+   *
+   * Addresses on the list cannot cast a vote on the proposal. Only
+   * maintainers of the project can edit the list.
+   *
+   * # Arguments
+   * * `env` - The environment object
+   * * `maintainer` - A maintainer of the project (must authenticate)
+   * * `project_key` - The project key identifier
+   * * `proposal_id` - The ID of the proposal
+   * * `addresses` - Addresses to add to the list
+   *
+   * # Panics
+   * * If the maintainer is not authorized
+   * * If the proposal is not active anymore
+   */
+  add_conflict_of_interest: (
+    {
+      maintainer,
+      project_key,
+      proposal_id,
+      addresses,
+    }: {
+      maintainer: string;
+      project_key: Buffer;
+      proposal_id: u32;
+      addresses: Array<string>;
+    },
+    options?: MethodOptions,
+  ) => Promise<AssembledTransaction<null>>;
+  /**
+   * Construct and simulate a get_conflict_of_interest transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   * Get the conflict-of-interest list for a proposal.
+   *
+   * # Arguments
+   * * `env` - The environment object
+   * * `project_key` - The project key identifier
+   * * `proposal_id` - The ID of the proposal
+   *
+   * # Returns
+   * * `Vec<Address>` - Addresses barred from voting on the proposal
+   */
+  get_conflict_of_interest: (
+    {
+      project_key,
+      proposal_id,
+    }: {
+      project_key: Buffer;
+      proposal_id: u32;
+    },
+    options?: MethodOptions,
+  ) => Promise<AssembledTransaction<Array<string>>>;
+  /**
    * Construct and simulate a get_anonymous_voting_config transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
    * Get the anonymous voting configuration for a project.
    *
@@ -619,6 +680,37 @@ export interface Client {
     },
     options?: MethodOptions,
   ) => Promise<AssembledTransaction<AnonymousVoteConfig>>;
+  /**
+   * Construct and simulate a remove_conflict_of_interest transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   * Remove addresses from the conflict-of-interest list of a proposal.
+   *
+   * Only maintainers of the project can edit the list.
+   *
+   * # Arguments
+   * * `env` - The environment object
+   * * `maintainer` - A maintainer of the project (must authenticate)
+   * * `project_key` - The project key identifier
+   * * `proposal_id` - The ID of the proposal
+   * * `addresses` - Addresses to remove from the list
+   *
+   * # Panics
+   * * If the maintainer is not authorized
+   * * If the proposal is not active anymore
+   */
+  remove_conflict_of_interest: (
+    {
+      maintainer,
+      project_key,
+      proposal_id,
+      addresses,
+    }: {
+      maintainer: string;
+      project_key: Buffer;
+      proposal_id: u32;
+      addresses: Array<string>;
+    },
+    options?: MethodOptions,
+  ) => Promise<AssembledTransaction<null>>;
   /**
    * Construct and simulate a build_commitments_from_votes transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
    * Build vote commitments from votes and seeds for anonymous voting.
@@ -654,29 +746,6 @@ export interface Client {
     },
     options?: MethodOptions,
   ) => Promise<AssembledTransaction<Array<Buffer>>>;
-  /**
-   * Construct and simulate a migrate_stellarpga_vote_tallies transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
-   * Recompute and persist aggregate anonymous vote tallies for `stellarpga`.
-   *
-   * This migration is intentionally scoped to the `stellarpga` project only.
-   * Proposal IDs are `0..DaoTotalProposals` for that project. It is idempotent.
-   *
-   * # Arguments
-   * * `env` - The environment object
-   * * `admin` - Admin address authorized to run migrations
-   *
-   * # Panics
-   * * If `admin` is not authorized
-   * * If migration invariants are violated
-   */
-  migrate_stellarpga_vote_tallies: (
-    {
-      admin,
-    }: {
-      admin: string;
-    },
-    options?: MethodOptions,
-  ) => Promise<AssembledTransaction<null>>;
   /**
    * Construct and simulate a pause transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
    * Pause or unpause the contract (emergency stop.)
@@ -1293,15 +1362,15 @@ export declare class Client extends ContractClient {
     create_proposal: (json: string) => AssembledTransaction<number>;
     revoke_proposal: (json: string) => AssembledTransaction<null>;
     anonymous_voting_setup: (json: string) => AssembledTransaction<null>;
+    add_conflict_of_interest: (json: string) => AssembledTransaction<null>;
+    get_conflict_of_interest: (json: string) => AssembledTransaction<string[]>;
     get_anonymous_voting_config: (
       json: string,
     ) => AssembledTransaction<AnonymousVoteConfig>;
+    remove_conflict_of_interest: (json: string) => AssembledTransaction<null>;
     build_commitments_from_votes: (
       json: string,
     ) => AssembledTransaction<Buffer<ArrayBufferLike>[]>;
-    migrate_stellarpga_vote_tallies: (
-      json: string,
-    ) => AssembledTransaction<null>;
     pause: (json: string) => AssembledTransaction<null>;
     version: (json: string) => AssembledTransaction<number>;
     approve_upgrade: (json: string) => AssembledTransaction<null>;

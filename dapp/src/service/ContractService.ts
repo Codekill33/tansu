@@ -17,6 +17,7 @@ import { handleFreighterError } from "../utils/errorHandler";
 import type { VoteType } from "types/proposal";
 import { signAndSend } from "./TxService";
 import { encryptWithPublicKey } from "../utils/crypto";
+import { invalidateProposalCache } from "./ReadContractService";
 
 /**
  * Get configured contract client instance (using proven working Tansu instance)
@@ -269,6 +270,7 @@ export async function voteToProposal(
   checkSimulationError(assembledTx);
 
   await submitTransaction(assembledTx);
+  invalidateProposalCache(project_name, proposal_id);
   return true;
 }
 
@@ -297,7 +299,9 @@ export async function execute(
   // Check for simulation errors (contract errors) before submitting
   checkSimulationError(assembledTx);
 
-  return await submitTransaction(assembledTx);
+  const result = await submitTransaction(assembledTx);
+  invalidateProposalCache(project_name, proposal_id);
+  return result;
 }
 
 // Direct export - no wrapper needed
@@ -333,6 +337,58 @@ export async function setBadges(
   });
 
   // Check for simulation errors (contract errors) before submitting
+  checkSimulationError(assembledTx);
+
+  await submitTransaction(assembledTx);
+  return true;
+}
+
+/**
+ * Add addresses to the conflict of interest list for a proposal.
+ */
+export async function addConflictOfInterest(
+  project_name: string,
+  proposal_id: number,
+  addresses: string[],
+): Promise<boolean> {
+  const client = getClient();
+  const maintainer = client.options.publicKey;
+  if (!maintainer) throw new Error("Wallet not connected");
+
+  const projectKey = getProjectKey(project_name);
+
+  const assembledTx = await client.add_conflict_of_interest({
+    maintainer,
+    project_key: projectKey,
+    proposal_id: Number(proposal_id),
+    addresses,
+  });
+  checkSimulationError(assembledTx);
+
+  await submitTransaction(assembledTx);
+  return true;
+}
+
+/**
+ * Remove addresses from the conflict of interest list for a proposal.
+ */
+export async function removeConflictOfInterest(
+  project_name: string,
+  proposal_id: number,
+  addresses: string[],
+): Promise<boolean> {
+  const client = getClient();
+  const maintainer = client.options.publicKey;
+  if (!maintainer) throw new Error("Wallet not connected");
+
+  const projectKey = getProjectKey(project_name);
+
+  const assembledTx = await client.remove_conflict_of_interest({
+    maintainer,
+    project_key: projectKey,
+    proposal_id: Number(proposal_id),
+    addresses,
+  });
   checkSimulationError(assembledTx);
 
   await submitTransaction(assembledTx);

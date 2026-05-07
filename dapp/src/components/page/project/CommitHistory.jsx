@@ -1,9 +1,10 @@
 import { useStore } from "@nanostores/react";
+import Markdown from "markdown-to-jsx";
 import { useEffect, useState } from "react";
-import { getCommitHistory } from "../../../service/GithubService.ts";
+import { getCommitHistory } from "../../../service/RepositoryMetadataService.ts";
 import {
   loadConfigData,
-  loadProjectRepoInfo,
+  loadProjectRepoUrl,
 } from "../../../service/StateService.ts";
 import { formatDate } from "../../../utils/formatTimeFunctions.ts";
 import {
@@ -23,19 +24,14 @@ const CommitHistory = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
-  const [readmeExpanded, setReadmeExpanded] = useState(false);
 
   const fetchCommitHistory = async (page = 1) => {
     setLoadError(null);
-    const projectRepoInfo = loadProjectRepoInfo();
-    if (projectRepoInfo?.author && projectRepoInfo?.repository) {
+    const projectRepoUrl = loadProjectRepoUrl();
+    if (projectRepoUrl) {
       setIsLoading(true);
       try {
-        const history = await getCommitHistory(
-          projectRepoInfo.author,
-          projectRepoInfo.repository,
-          page,
-        );
+        const history = await getCommitHistory(projectRepoUrl, page);
 
         if (history) {
           setCommitHistory(history);
@@ -54,7 +50,7 @@ const CommitHistory = () => {
         setIsLoading(false);
       }
     } else {
-      setLoadError("Project repository info not available.");
+      setLoadError("Project repository URL not available.");
       setIsLoading(false);
     }
   };
@@ -108,21 +104,16 @@ const CommitHistory = () => {
 
         {!isSoftwareProject ? (
           readme ? (
-            <div className="flex flex-col gap-3">
-              <p className="text-base text-primary whitespace-pre-wrap">
-                {readmeExpanded
-                  ? readme
-                  : readme.slice(0, 400) + (readme.length > 400 ? "..." : "")}
-              </p>
-              {readme.length > 400 && (
-                <button
-                  type="button"
-                  className="text-sm text-primary underline self-start"
-                  onClick={() => setReadmeExpanded(!readmeExpanded)}
-                >
-                  {readmeExpanded ? "Less" : "More"}
-                </button>
-              )}
+            <div className="markdown-body border border-gray-200 rounded max-h-[60vh] overflow-y-auto overflow-x-hidden p-4">
+              <Markdown
+                options={{
+                  overrides: {
+                    img: { props: { className: "max-w-full h-auto" } },
+                  },
+                }}
+              >
+                {readme}
+              </Markdown>
             </div>
           ) : (
             <p className="text-base text-secondary">No README available.</p>
