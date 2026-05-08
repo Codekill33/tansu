@@ -14,7 +14,7 @@ import Label from "components/utils/Label.tsx";
 import FlowProgressModal from "components/utils/FlowProgressModal.tsx";
 import Step from "components/utils/Step.tsx";
 import Title from "components/utils/Title.tsx";
-import { useState, type FC, useCallback, useEffect, useRef } from "react";
+import { useState, type FC, useCallback, useEffect } from "react";
 import { extractConfigData, toast } from "utils/utils";
 import {
   validateProjectName as validateProjectNameUtil,
@@ -35,7 +35,9 @@ import {
   SUPPORTED_REPOSITORY_PROVIDERS,
   type RepositoryProvider,
 } from "utils/editLinkFunctions";
-import SimpleMarkdownEditor from "components/utils/SimpleMarkdownEditor";
+import MarkdownEditorWithImages, {
+  type AttachedImage,
+} from "components/utils/MarkdownEditorWithImages";
 
 // Get domain contract ID from environment with fallback
 const SOROBAN_DOMAIN_CONTRACT_ID =
@@ -79,8 +81,7 @@ const CreateProjectModal: FC<ModalProps> = ({ onClose }) => {
   const [selectedRepositoryProvider, setSelectedRepositoryProvider] =
     useState<RepositoryProvider>("github");
   const [readmeContent, setReadmeContent] = useState("");
-  type ReadmeImage = { localUrl: string; publicUrl: string; source: File };
-  const [readmeImageFiles, setReadmeImageFiles] = useState<ReadmeImage[]>([]);
+  const [readmeImageFiles, setReadmeImageFiles] = useState<AttachedImage[]>([]);
   const [readmeImageError, setReadmeImageError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [domainContractId] = useState(SOROBAN_DOMAIN_CONTRACT_ID);
@@ -110,21 +111,6 @@ const CreateProjectModal: FC<ModalProps> = ({ onClose }) => {
   const repositoryUrlPlaceholder = getRepositoryUrlPlaceholder(
     activeRepositoryProvider,
   );
-
-  // Keep a ref in sync so the unmount cleanup always sees the latest URLs
-  const readmeImageFilesRef = useRef<ReadmeImage[]>([]);
-  useEffect(() => {
-    readmeImageFilesRef.current = readmeImageFiles;
-  }, [readmeImageFiles]);
-
-  // Revoke blob URLs only on unmount, not on every state change
-  useEffect(() => {
-    return () => {
-      readmeImageFilesRef.current.forEach((img) =>
-        URL.revokeObjectURL(img.localUrl),
-      );
-    };
-  }, []);
 
   // Seed the first maintainer address once when the wallet resolves
   useEffect(() => {
@@ -984,118 +970,15 @@ ${maintainerGithubs.map((gh) => `[[PRINCIPALS]]\ngithub="${gh}"`).join("\n\n")}
                       error={githubRepoUrlError}
                     />
                   ) : (
-                    <div className="flex flex-col gap-3">
-                      <SimpleMarkdownEditor
-                        value={readmeContent}
-                        onChange={setReadmeContent}
-                        placeholder="Write your project README in markdown format..."
-                      />
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 bg-gray-50 rounded-md">
-                        <p className="text-sm text-secondary flex-1">
-                          Optionally attach images and insert them into your
-                          README. Supported formats: PNG, JPG, JPEG, SVG, GIF
-                          (max 5MB each).
-                        </p>
-                        <label className="cursor-pointer bg-primary text-white px-4 py-2 rounded-md hover:bg-primary/90 transition-colors text-sm font-medium whitespace-nowrap">
-                          Add Image
-                          <input
-                            type="file"
-                            accept="image/png,image/jpeg,image/jpg,image/svg+xml,image/gif"
-                            className="hidden"
-                            onChange={(e) => {
-                              setReadmeImageError(null);
-                              const file = e.target.files?.[0];
-                              if (!file) return;
-                              const allowedTypes = [
-                                "image/png",
-                                "image/jpeg",
-                                "image/jpg",
-                                "image/svg+xml",
-                                "image/gif",
-                              ];
-                              if (!allowedTypes.includes(file.type)) {
-                                setReadmeImageError(
-                                  "Unsupported image type. Allowed: png, jpg, jpeg, svg, gif",
-                                );
-                                return;
-                              }
-                              if (file.size > 5 * 1024 * 1024) {
-                                setReadmeImageError(
-                                  "Please upload an image smaller than 5MB",
-                                );
-                                return;
-                              }
-                              const localUrl = URL.createObjectURL(file);
-                              const publicUrl = `images/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-                              setReadmeImageFiles((prev) => [
-                                ...prev,
-                                { localUrl, publicUrl, source: file },
-                              ]);
-                              setReadmeContent(
-                                (prev) =>
-                                  `${prev}${prev && !prev.endsWith("\n") ? "\n\n" : ""}![](${localUrl})\n`,
-                              );
-                              e.target.value = "";
-                            }}
-                          />
-                        </label>
-                      </div>
-                      {readmeImageError && (
-                        <p className="text-red-500 text-sm">
-                          {readmeImageError}
-                        </p>
-                      )}
-                      {readmeImageFiles.length > 0 && (
-                        <div className="space-y-3">
-                          <p className="text-sm font-medium text-primary">
-                            Attached Images ({readmeImageFiles.length})
-                          </p>
-                          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                            {readmeImageFiles.map((img, idx) => (
-                              <div
-                                key={idx}
-                                className="border border-gray-200 p-3 flex flex-col gap-3 rounded-lg bg-white"
-                              >
-                                <img
-                                  src={img.localUrl}
-                                  alt={`attachment-${idx}`}
-                                  className="w-full h-20 object-contain rounded"
-                                />
-                                <div className="flex justify-between items-center gap-2">
-                                  <button
-                                    type="button"
-                                    className="text-blue-600 hover:text-blue-800 underline text-xs"
-                                    onClick={() =>
-                                      setReadmeContent(
-                                        (prev) =>
-                                          `${prev}${prev && !prev.endsWith("\n") ? "\n\n" : ""}![](${img.localUrl})\n`,
-                                      )
-                                    }
-                                  >
-                                    Insert
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="text-red-600 hover:text-red-800 underline text-xs"
-                                    onClick={() => {
-                                      URL.revokeObjectURL(img.localUrl);
-                                      setReadmeImageFiles((prev) =>
-                                        prev.filter((_, i) => i !== idx),
-                                      );
-                                      setReadmeContent((prev) =>
-                                        prev.replaceAll(img.localUrl, ""),
-                                      );
-                                    }}
-                                  >
-                                    Remove
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                    <MarkdownEditorWithImages
+                      value={readmeContent}
+                      onChange={setReadmeContent}
+                      imageFiles={readmeImageFiles}
+                      onImageFilesChange={setReadmeImageFiles}
+                      imageError={readmeImageError}
+                      onImageErrorChange={setReadmeImageError}
+                      placeholder="Write your project README in markdown format..."
+                    />
                   )}
                 </div>
               </div>
