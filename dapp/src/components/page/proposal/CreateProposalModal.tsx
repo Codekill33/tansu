@@ -467,6 +467,7 @@ const CreateProposalModal = () => {
   };
 
   const handleCloseModal = () => {
+    imageFiles.forEach((img) => URL.revokeObjectURL(img.localUrl));
     setImageFiles([]);
     setShowModal(false);
     setStep(1);

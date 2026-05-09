@@ -14,7 +14,7 @@ import Label from "components/utils/Label.tsx";
 import FlowProgressModal from "components/utils/FlowProgressModal.tsx";
 import Step from "components/utils/Step.tsx";
 import Title from "components/utils/Title.tsx";
-import { useState, type FC, useCallback, useEffect } from "react";
+import { useState, type FC, useCallback, useEffect, useRef } from "react";
 import { extractConfigData, toast } from "utils/utils";
 import {
   validateProjectName as validateProjectNameUtil,
@@ -111,6 +111,19 @@ const CreateProjectModal: FC<ModalProps> = ({ onClose }) => {
   const repositoryUrlPlaceholder = getRepositoryUrlPlaceholder(
     activeRepositoryProvider,
   );
+
+  // Revoke blob URLs on modal unmount (not on step navigation)
+  const readmeImageFilesRef = useRef<AttachedImage[]>([]);
+  useEffect(() => {
+    readmeImageFilesRef.current = readmeImageFiles;
+  }, [readmeImageFiles]);
+  useEffect(() => {
+    return () => {
+      readmeImageFilesRef.current.forEach((img) =>
+        URL.revokeObjectURL(img.localUrl),
+      );
+    };
+  }, []);
 
   // Seed the first maintainer address once when the wallet resolves
   useEffect(() => {

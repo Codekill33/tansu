@@ -356,6 +356,7 @@ const UpdateConfigModal = () => {
   }, [open, isSoftwareProject]);
 
   const handleClose = () => {
+    readmeImageFiles.forEach((img) => URL.revokeObjectURL(img.localUrl));
     const wasSuccessful = isSuccessful;
     setOpen(false);
     setIsSuccessful(false);

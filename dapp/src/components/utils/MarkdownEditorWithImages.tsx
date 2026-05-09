@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ChangeEvent } from "react";
+import { type ChangeEvent } from "react";
 import SimpleMarkdownEditor from "components/utils/SimpleMarkdownEditor";
 
 export type AttachedImage = { localUrl: string; publicUrl: string; source: File };
@@ -31,17 +31,6 @@ const MarkdownEditorWithImages = ({
   onImageErrorChange,
   placeholder,
 }: Props) => {
-  const imageFilesRef = useRef<AttachedImage[]>([]);
-  useEffect(() => {
-    imageFilesRef.current = imageFiles;
-  }, [imageFiles]);
-
-  useEffect(() => {
-    return () => {
-      imageFilesRef.current.forEach((img) => URL.revokeObjectURL(img.localUrl));
-    };
-  }, []);
-
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     onImageErrorChange(null);
     const file = e.target.files?.[0];
