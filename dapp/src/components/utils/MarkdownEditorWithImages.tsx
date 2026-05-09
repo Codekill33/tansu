@@ -18,7 +18,10 @@ const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 
 // Rewrite relative image/link paths to absolute URLs for the preview tab.
 // Blob URLs (newly uploaded) are already absolute and are left untouched.
-export function rewriteRelativePaths(markdown: string, baseUrl: string): string {
+export function rewriteRelativePaths(
+  markdown: string,
+  baseUrl: string,
+): string {
   return markdown
     .replace(
       /!\[([^\]]*)\]\((?!https?:\/\/|blob:)\.?\/?([^)]+)\)/g,
