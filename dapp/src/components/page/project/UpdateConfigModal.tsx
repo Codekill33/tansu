@@ -222,6 +222,7 @@ const UpdateConfigModal = () => {
 
   const [showButton, setShowButton] = useState(false);
   const [open, setOpen] = useState(false);
+  const [ipfsBaseUrl, setIpfsBaseUrl] = useState<string | undefined>(undefined);
   const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -339,6 +340,8 @@ const UpdateConfigModal = () => {
       existingTomlRef.current = null;
       return;
     }
+
+    setIpfsBaseUrl(getIpfsBasicLink(ipfsCid));
 
     // Parallel fetch of TOML and README
     Promise.all([
@@ -764,6 +767,9 @@ const UpdateConfigModal = () => {
                           imageError={readmeImageError}
                           onImageErrorChange={setReadmeImageError}
                           placeholder="Write your project README in markdown format..."
+                          {...(ipfsBaseUrl !== undefined && {
+                            imageBaseUrl: ipfsBaseUrl,
+                          })}
                         />
                       </div>
                     )}

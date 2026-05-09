@@ -1,7 +1,11 @@
 import { type ChangeEvent } from "react";
 import SimpleMarkdownEditor from "components/utils/SimpleMarkdownEditor";
 
-export type AttachedImage = { localUrl: string; publicUrl: string; source: File };
+export type AttachedImage = {
+  localUrl: string;
+  publicUrl: string;
+  source: File;
+};
 
 const ALLOWED_IMAGE_TYPES = [
   "image/png",
@@ -12,6 +16,20 @@ const ALLOWED_IMAGE_TYPES = [
 ];
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 
+// Rewrite relative image/link paths to absolute URLs for the preview tab.
+// Blob URLs (newly uploaded) are already absolute and are left untouched.
+function rewriteRelativePaths(markdown: string, baseUrl: string): string {
+  return markdown
+    .replace(
+      /!\[([^\]]*)\]\((?!https?:\/\/|blob:)\.?\/?([^)]+)\)/g,
+      (_, alt, src) => `![${alt}](${baseUrl}/${src})`,
+    )
+    .replace(
+      /\[([^\]]*)\]\((?!https?:\/\/|blob:|#)\.?\/?([^)]+)\)/g,
+      (_, text, href) => `[${text}](${baseUrl}/${href})`,
+    );
+}
+
 interface Props {
   value: string;
   onChange: (value: string) => void;
@@ -20,6 +38,7 @@ interface Props {
   imageError: string | null;
   onImageErrorChange: (error: string | null) => void;
   placeholder?: string;
+  imageBaseUrl?: string;
 }
 
 const MarkdownEditorWithImages = ({
@@ -30,6 +49,7 @@ const MarkdownEditorWithImages = ({
   imageError,
   onImageErrorChange,
   placeholder,
+  imageBaseUrl,
 }: Props) => {
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     onImageErrorChange(null);
@@ -60,6 +80,9 @@ const MarkdownEditorWithImages = ({
         value={value}
         onChange={onChange}
         {...(placeholder !== undefined && { placeholder })}
+        {...(imageBaseUrl !== undefined && {
+          previewValue: rewriteRelativePaths(value, imageBaseUrl),
+        })}
       />
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 bg-gray-50 rounded-md">
         <p className="text-sm text-secondary flex-1">
@@ -110,7 +133,9 @@ const MarkdownEditorWithImages = ({
                     className="text-red-600 hover:text-red-800 underline text-xs"
                     onClick={() => {
                       URL.revokeObjectURL(img.localUrl);
-                      onImageFilesChange(imageFiles.filter((_, i) => i !== idx));
+                      onImageFilesChange(
+                        imageFiles.filter((_, i) => i !== idx),
+                      );
                       onChange(value.replaceAll(img.localUrl, ""));
                     }}
                   >
